@@ -13,7 +13,7 @@ name: Deploy jkr-server (int)
 
 on:
   push:
-    branches: [development]
+    branches: [main]
     paths:
       - "server/**"
       - "helm/jkr-server/**"
