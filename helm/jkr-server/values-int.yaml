@@ -1,0 +1,23 @@
+# Integration environment. Deployed to the jkr-int namespace.
+# image.repository / image.tag / relayHost are supplied by the workflow.
+#
+# int and prod share ONE node and both use hostNetwork, so they cannot both bind the
+# standard 21115-21119. int therefore uses a shifted block that rustdesk-server derives
+# the same way (see values.yaml):
+#     hbbs: 22116 tcp+udp, 22115 (NAT test), 22118 (websocket)
+#     hbbr: 22117,                           22119 (websocket)
+# To test int with a REAL client, open TCP 22115-22119 + UDP 22116 on the node's
+# security group and point the client at "<RELAY_HOST>:22116" / "<RELAY_HOST>:22117".
+# Without that, int is still verified in-cluster by the smoke test.
+imagePullSecrets:
+  - name: ecr-pull
+
+ports:
+  rendezvous: 22116
+  relay: 22117
+
+persistence:
+  size: 1Gi
+  # Default class (Delete): the int keypair is disposable.
+  storageClass: ebs-gp3
+  keepOnUninstall: false

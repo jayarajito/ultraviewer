@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "jkr-server.fullname" . }}-data
+  labels:
+    {{- include "jkr-server.labels" . | nindent 4 }}
+  {{- if .Values.persistence.keepOnUninstall }}
+  annotations:
+    # Helm will NOT delete this claim on `helm uninstall` or when an atomic rollback
+    # removes a failed first install. The volume holds the server private key.
+    "helm.sh/resource-policy": keep
+  {{- end }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}

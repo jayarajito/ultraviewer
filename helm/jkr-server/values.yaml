@@ -1,0 +1,95 @@
+# Base values for the jkr-server chart (JustKeepRemote ID/rendezvous + relay server).
+# Environment files (values-int.yaml, values-prod.yaml) override what differs per
+# environment; the deploy workflows supply image.repository, image.tag (an immutable
+# git-SHA) and relayHost.
+#
+# This chart deliberately has NO replicaCount: the server must run exactly ONE pod
+# (fixed host ports + a ReadWriteOnce volume holding the server keypair).
+
+image:
+  # Full ECR URI, e.g. <account>.dkr.ecr.<region>.amazonaws.com/jkr-server.
+  # Left empty so a missing value fails loudly at render time.
+  repository: ""
+  # Never a moving tag. The workflow passes --set image.tag=<12-char git sha>.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# The self-managed kubelet cannot authenticate to ECR by itself; the deploy workflow
+# creates/refreshes a docker-registry secret named ecr-pull in the namespace each run.
+imagePullSecrets: []
+
+# REQUIRED. The public DNS name (or IPv4) clients are told to use for the RELAY
+# (hbbr). It is handed out by hbbs as "<relayHost>:<ports.relay>", so it must be
+# reachable by the clients - not an in-cluster name. Supplied by the workflow from the
+# GitHub Environment variable RELAY_HOST.
+relayHost: ""
+
+# Base ports. Everything else is derived exactly as rustdesk-server derives it:
+#   hbbs: <rendezvous> tcp+udp, <rendezvous>-1 tcp (NAT test), <rendezvous>+2 tcp (websocket)
+#   hbbr: <relay> tcp,          <relay>+2 tcp (websocket)
+# Defaults are the standard RustDesk ports, so clients need no ":port" suffix.
+# The render FAILS if any two derived ports coincide.
+ports:
+  rendezvous: 21116
+  relay: 21117
+
+# Serve the ports directly on the node. Why: this cluster has no LoadBalancer
+# implementation, NodePort cannot serve fixed ports (and UDP 21116) and hbbs needs the
+# real client source address (behind NAT it sees a cluster-internal one, which breaks
+# LAN detection and hole punching). Consequences:
+#   * the NODE's firewall / AWS security group must allow the derived ports
+#   * only one pod per node can hold the ports -> strategy is Recreate
+#   * a namespace enforcing the Pod Security "baseline"/"restricted" profile will
+#     reject hostNetwork pods
+hostNetwork: true
+
+# Server state: keypair (id_ed25519[.pub]) + peer database (db_v2.sqlite3).
+# LOSING THE PRIVATE KEY invalidates every client configured with the public key.
+persistence:
+  size: 1Gi
+  # "" = cluster default class. Prod should use a class with reclaimPolicy: Retain.
+  # NOTE: storageClassName is immutable on an existing claim.
+  storageClass: ""
+  # Annotate the PVC with helm.sh/resource-policy: keep so `helm uninstall` (or an
+  # atomic rollback of a failed first install) can NOT delete the volume with the key.
+  keepOnUninstall: true
+
+# In-cluster ClusterIP Service. It does not expose the server to clients (hostNetwork
+# does that); it exists for in-cluster checks (smoke test) and discovery.
+service:
+  type: ClusterIP
+
+hbbs:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+hbbr:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 1000m, memory: 512Mi }
+
+# Pod and container hardening. The image runs as uid 10001 (see server/Dockerfile).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001 # makes the volume writable by the non-root user
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true # state lives on the volume; /tmp is an emptyDir
+  capabilities:
+    drop:
+      - ALL
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

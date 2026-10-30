@@ -1,0 +1,3 @@
+# Build/run logs and scratch files — reproducible, not committed.
+*.log
+*.txt

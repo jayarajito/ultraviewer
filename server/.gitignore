@@ -1,0 +1,3 @@
+# Server runtime data — DO NOT COMMIT
+# Contains the server private key and the peer database.
+data/

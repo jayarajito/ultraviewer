@@ -1,0 +1,21 @@
+{{- $p := include "jkr-server.ports" . | fromJson -}}
+JustKeepRemote server "{{ .Release.Name }}" deployed to namespace "{{ .Release.Namespace }}".
+
+1. Server public key (every client must be configured with it):
+     kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "jkr-server.fullname" . }} -c hbbs -- cat /data/id_ed25519.pub
+
+2. BACK UP THE PRIVATE KEY once (never commit it); losing it invalidates every client:
+     kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "jkr-server.fullname" . }} -c hbbs -- cat /data/id_ed25519
+
+3. Client configuration:
+     ID server    : {{ .Values.relayHost }}{{ if ne (int $p.rendezvous) 21116 }}:{{ int $p.rendezvous }}{{ end }}
+     Relay server : {{ .Values.relayHost }}{{ if ne (int $p.relay) 21117 }}:{{ int $p.relay }}{{ end }}
+     Key          : (from step 1)
+
+4. The node's firewall / AWS security group must allow inbound:
+     TCP {{ int $p.natTest }}-{{ int $p.hbbrWebsocket }} (individually: {{ int $p.natTest }}, {{ int $p.rendezvous }}, {{ int $p.relay }}, {{ int $p.hbbsWebsocket }}, {{ int $p.hbbrWebsocket }})
+     UDP {{ int $p.rendezvous }}
+{{- if not .Values.hostNetwork }}
+
+NOTE: hostNetwork is disabled - the ports above are NOT served on the node.
+{{- end }}

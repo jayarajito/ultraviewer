@@ -1,0 +1,137 @@
+{{- $p := include "jkr-server.ports" . | fromJson -}}
+{{- $relayHost := include "jkr-server.relayHost" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jkr-server.fullname" . }}
+  labels:
+    {{- include "jkr-server.labels" . | nindent 4 }}
+spec:
+  # Exactly one pod, always (fixed host ports + ReadWriteOnce volume with the server
+  # keypair). Recreate: the new pod can only bind the ports / mount the volume after the
+  # old one is gone. Consequence: a deploy briefly interrupts the ID server and drops
+  # sessions currently RELAYED through hbbr (direct peer-to-peer sessions survive).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "jkr-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "jkr-server.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "jkr-server.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- if .Values.hostNetwork }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        # ---- hbbs: ID / rendezvous server -------------------------------------------
+        - name: hbbs
+          image: {{ include "jkr-server.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: RELAY_HOST
+              value: {{ $relayHost | quote }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              # hbbs resolves the -r host at startup and SILENTLY DROPS it when that fails
+              # (src/common.rs get_servers), then hands every client an empty relay list:
+              # the pod looks healthy but every relayed connection fails with "Failed to
+              # connect to relay server". Refuse to start instead of running half-configured.
+              getent ahosts "${RELAY_HOST}" >/dev/null || {
+                echo "FATAL: RELAY_HOST '${RELAY_HOST}' does not resolve from inside this pod; refusing to start with the relay disabled" >&2
+                exit 1
+              }
+              # -p : base port   -r : relay address handed to clients   -k _ : only accept
+              # clients that present this server's key (generated on first start into /data)
+              exec hbbs -p {{ int $p.rendezvous }} -r "${RELAY_HOST}:{{ int $p.relay }}" -k _
+          ports:
+            - { name: nat-test, containerPort: {{ int $p.natTest }}, protocol: TCP }
+            - { name: rdv-tcp, containerPort: {{ int $p.rendezvous }}, protocol: TCP }
+            - { name: rdv-udp, containerPort: {{ int $p.rendezvous }}, protocol: UDP }
+            - { name: hbbs-ws, containerPort: {{ int $p.hbbsWebsocket }}, protocol: TCP }
+          readinessProbe:
+            tcpSocket: { port: nat-test }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket: { port: nat-test }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.hbbs.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+
+        # ---- hbbr: relay server -----------------------------------------------------
+        - name: hbbr
+          image: {{ include "jkr-server.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              # On the very first start hbbs creates the keypair. Wait for it so the two
+              # processes can never race to create two different keys.
+              until [ -s /data/id_ed25519 ]; do echo "waiting for hbbs to create the server key..."; sleep 2; done
+              exec hbbr -p {{ int $p.relay }} -k _
+          ports:
+            - { name: relay, containerPort: {{ int $p.relay }}, protocol: TCP }
+            - { name: hbbr-ws, containerPort: {{ int $p.hbbrWebsocket }}, protocol: TCP }
+          readinessProbe:
+            tcpSocket: { port: relay }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket: { port: relay }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.hbbr.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "jkr-server.fullname" . }}-data
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

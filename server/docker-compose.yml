@@ -1,0 +1,46 @@
+# JustKeepRemote - DEV server using OUR from-source image (jkr-server).
+#   build image : powershell -File scripts\build-server-image.ps1
+#   start       : powershell -File scripts\dev-server-up.ps1     (seeds the volume, then `up -d`)
+#   revert      : docker compose -f docker-compose.upstream.yml up -d   (old upstream image + ./data)
+#
+# Same hardening as the K8s manifest: non-root, read-only rootfs, caps dropped, `-k _`.
+# State lives in the named volume `jkr-dev-data` (NOT a Windows bind mount: the server
+# enforces 0600 on the private key, which NTFS bind mounts can't honour).
+#
+# RELAY_HOST = address clients are told to use for the relay (this PC's LAN IP).
+#   hbbs: 21115/tcp NAT test | 21116/tcp+udp signalling | 21118/tcp ws
+#   hbbr: 21117/tcp relay    | 21119/tcp ws
+x-hardened: &hardened
+  image: jkr-server:dev
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  volumes:
+    - jkr-dev-data:/data
+
+services:
+  hbbs:
+    <<: *hardened
+    container_name: jkr-hbbs
+    environment:
+      RELAY_HOST: ${RELAY_HOST:-192.168.0.108}
+    command: ["sh", "-c", "exec hbbs -r \"$${RELAY_HOST}:21117\" -k _"]
+    ports:
+      - "21115:21115"
+      - "21116:21116"
+      - "21116:21116/udp"
+      - "21118:21118"
+
+  hbbr:
+    <<: *hardened
+    container_name: jkr-hbbr
+    command: ["sh", "-c", "until [ -s /data/id_ed25519 ]; do sleep 1; done; exec hbbr -k _"]
+    ports:
+      - "21117:21117"
+      - "21119:21119"
+
+volumes:
+  jkr-dev-data:
+    external: true

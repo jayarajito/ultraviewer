@@ -1,0 +1,35 @@
+# JustKeepRemote — self-hosted RustDesk server (dev, local Docker)
+# hbbs = ID/rendezvous server, hbbr = relay server.
+# Ports:
+#   21115/tcp  hbbs  (NAT type test)
+#   21116/tcp  hbbs  (TCP hole punching / signaling)
+#   21116/udp  hbbs  (ID registration / heartbeat)
+#   21118/tcp  hbbs  (web client support, optional)
+#   21117/tcp  hbbr  (relay)
+#   21119/tcp  hbbr  (web client relay, optional)
+services:
+  hbbs:
+    container_name: jkr-hbbs
+    image: rustdesk/rustdesk-server:latest
+    command: hbbs
+    ports:
+      - "21115:21115"
+      - "21116:21116"
+      - "21116:21116/udp"
+      - "21118:21118"
+    volumes:
+      - ./data:/root
+    restart: unless-stopped
+    depends_on:
+      - hbbr
+
+  hbbr:
+    container_name: jkr-hbbr
+    image: rustdesk/rustdesk-server:latest
+    command: hbbr
+    ports:
+      - "21117:21117"
+      - "21119:21119"
+    volumes:
+      - ./data:/root
+    restart: unless-stopped

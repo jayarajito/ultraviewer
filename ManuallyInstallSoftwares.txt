@@ -1,0 +1,144 @@
+https://rustdesk.com/docs/en/dev/build/windows/#c-build-environment
+
+Track B — what you need to install for the client
+The server runs on published images, but building the RustDesk client from source requires a native toolchain I can't auto-install for you (these are large installers with interactive steps). Please install, in this order:
+
+Visual Studio Build Tools — with "Desktop development with C++" (MSVC v143 + Windows 11 SDK). https://visualstudio.microsoft.com/downloads/
+Rust (MSVC toolchain) — https://rustup.rs → run rustup default stable-msvc
+LLVM/Clang (bindgen needs libclang) — https://github.com/llvm/llvm-project/releases
+CMake — https://cmake.org/download/ (add to PATH)
+Flutter SDK — https://docs.flutter.dev/get-started/install/windows
+vcpkg — git clone https://github.com/microsoft/vcpkg then run its bootstrap; set VCPKG_ROOT.
+A heads-up on expectations: building RustDesk from source on Windows is genuinely involved (vcpkg has to compile libvpx, libyuv, opus, and aom, plus the Flutter bridge). It can take a while and sometimes needs troubleshooting. When you've installed the above, tell me and I'll verify each tool, clone the client into vendor/, and drive the build step by step — fixing issues as they come up. Then we configure it against our server and prove an end-to-end connection.
+
+Want me to also prepare the client build scripts and the clone now so they're ready the moment the toolchain is in place? The server, meanwhile, is up — you can leave it running or stop it with docker compose down in the server/ folder.
+
+
+
+1. Downloaded the VS and Selected Desktop App with C++ and Installed
+2. Downloaded rustup‑init.exe
+https://rustup.rs/
+To install Rust, download and run
+rustup‑init.exe
+then follow the onscreen instructions.
+3. Downloaded LLVM 23.1.4
+https://github.com/llvm/llvm-project/releases
+4. Downloaded CMake
+https://cmake.org/download/
+5. Downloaded Flutter SDK
+https://docs.flutter.dev/install/manual
+
+Create a folder to store the SDK
+C:\Users\JAYARAJ\fluttersdk
+
+Extract the SDK, run Poweshell
+
+Expand-Archive -Path C:\Users\JAYARAJ\OneDrive\Development\Projects\UltraviewerClone\flutter_windows_3.47.8-stable.zip -DestinationPath C:\Users\JAYARAJ\fluttersdk
+
+Add Flutter to your PATH
+
+In the User variables for (username) section of the Environment Variables dialog, look for the Path entry.
+%USERPROFILE%\develop\flutter\bin
+C:\Users\JAYARAJ\fluttersdk\flutter\bin
+
+Click Move Up until the Flutter entry sits at the top of the list.
+
+flutter --version
+dart --version
+
+6. Downloaded vcpkg 
+Go to the folder you want to clone vcpkg and use Git Bash to run the following commands, download vcpkg, install 64-bit version of libvpx, libyuv and opus. 
+
+https://rustdesk.com/docs/en/dev/build/windows/#vcpkg
+
+C:\Users\JAYARAJ\vcpkg
+
+git clone https://github.com/microsoft/vcpkg
+vcpkg/bootstrap-vcpkg.bat
+export VCPKG_ROOT=$PWD/vcpkg
+vcpkg/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+
+
+Add System environment variable VCPKG_ROOT=<path>\vcpkg. The <path> should be the location you choose above to clone vcpkg.
+
+VCPKG_ROOT= C:\Users\JAYARAJ\vcpkg\vcpkg
+
+
+
+The one blocker — needs you
+The Flutter Windows build requires Developer Mode enabled in Windows (it needs symlink support for its plugin system). I did not enable this for you because it's a system-level security setting — it allows installing unsigned apps, so it's your call to make.
+
+To enable it, run this and toggle "Developer Mode" on:
+
+
+start ms-settings:developers
+
+
+Need to open the Firwall from the server 
+
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Try the new cross-platform PowerShell https://aka.ms/pscore6
+
+>powershell -ExecutionPolicy Bypass -File "C:\Users\JAYARAJ\OneDrive\Development\Projects\UltraviewerClone\ultraviewer\scripts\open-firewall.ps1"
+Firewall opened for JustKeepRemote server (TCP 21115-21119, UDP 21116) on Private/Domain networks.
+Rules added:
+
+DisplayName                 Enabled Direction Action
+-----------                 ------- --------- ------
+JustKeepRemote Server (TCP)    True   Inbound  Allow
+JustKeepRemote Server (UDP)    True   Inbound  Allow
+
+
+>
+
+
+Run again another firewall with Administrator
+
+powershell -ExecutionPolicy Bypass -File "C:\Users\JAYARAJ\OneDrive\Development\Projects\UltraviewerClone\ultraviewer\scripts\set-network-private.ps1"
+
+powershell -ExecutionPolicy Bypass -File "C:\Users\JAYARAJ\OneDrive\Development\Projects\UltraviewerClone\ultraviewer\scripts\open-firewall.ps1"
+
+
+Run Again Administrator
+
+powershell -ExecutionPolicy Bypass -File "C:\Users\JAYARAJ\OneDrive\Development\Projects\UltraviewerClone\ultraviewer\scripts\try-firewall.ps1"
+
+
+Run Again Normal ServerMachine
+
+powershell -ExecutionPolicy Bypass -File client-setup.ps1 192.168.0.108
+
+
+Still Not Connected
+
+
+Step 1 — On Machine A (this PC, 192.168.0.108, ID 221 266 011)
+Launch rustdesk.exe (it's currently closed). Confirm:
+
+ID shows 221 266 011
+Bottom-left: "Ready"
+Leave it running. This registers A as the controllable partner. Tell me once it shows "Ready" and I'll verify from the server log that A registered (this time I expect to see it register cleanly).
+
+Step 2 — On Machine B (the other PC, 192.168.0.104, ID 156 675 859)
+B must point at the server too. Copy 
+client-setup.ps1
+ to B, then on B run:
+
+
+powershell -ExecutionPolicy Bypass -File client-setup.ps1 192.168.0.108
+
+
+Paste me the "reachable = True/False" lines it prints — this is the one piece of data I still don't have: whether B can actually reach 192.168.0.108 across your LAN. Then launch rustdesk.exe on B; confirm it shows "Ready".
+
+Step 3 — Connect
+On B, enter 221 266 011 → Connect → password prompt → enter A's one-time password.
+
+
+Now I can connect the computer from 192.168.0.104 to 192.168.0.108 and 192.168.0.108 to 192.168.0.104
+
+
+
+
+

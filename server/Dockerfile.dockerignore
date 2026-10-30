@@ -1,0 +1,22 @@
+# BuildKit picks this up automatically for server/Dockerfile.
+# CRITICAL: the Windows build left a multi-GB target/ dir in the build context.
+target
+**/target
+.git
+**/.git
+
+# NOTE: do NOT exclude db_v2.sqlite3 or .env. sqlx::query! checks the SQL against
+# this committed schema DB at COMPILE time (DATABASE_URL=sqlite://./db_v2.sqlite3);
+# without it the build fails with "unable to open database file". It exists only in
+# the build stage - the runtime stage never copies it. Only exclude journal files.
+*.sqlite3-shm
+*.sqlite3-wal
+
+docs
+tests
+ui
+debian
+rcd
+systemd
+.vscode
+.github

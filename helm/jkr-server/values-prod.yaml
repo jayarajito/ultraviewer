@@ -1,0 +1,20 @@
+# Production environment. Deployed to the jkr-prod namespace.
+# image.tag is a validated git SHA promoted from int; relayHost is supplied by the workflow.
+#
+# Standard RustDesk ports (clients need no ":port" suffix):
+#     hbbs: 21116 tcp+udp, 21115 (NAT test), 21118 (websocket)
+#     hbbr: 21117,                           21119 (websocket)
+# Node security group must allow TCP 21115-21119 and UDP 21116 from the clients.
+imagePullSecrets:
+  - name: ecr-pull
+
+ports:
+  rendezvous: 21116
+  relay: 21117
+
+persistence:
+  size: 1Gi
+  # Retain class: the volume (and the server private key on it) survives deletion of the
+  # claim. Do not change on an existing claim - storageClassName is immutable.
+  storageClass: ebs-gp3-database
+  keepOnUninstall: true

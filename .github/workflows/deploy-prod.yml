@@ -1,0 +1,314 @@
+name: Deploy jkr-server (prod)
+
+# Promotes an image that was ALREADY built, smoke-tested and deployed on int to the
+# jkr-prod namespace. No rebuild: the exact bytes that ran on int are what ship.
+# Manual only. Gated twice: the GitHub `production` Environment (configure required
+# reviewers there) and a runner-IP approval issue before the cluster is reachable.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "12-character git-SHA image tag already pushed to ECR (the tag deployed on int)"
+        required: true
+        type: string
+      runner:
+        description: "Runner for the deploy: ubuntu-latest now, or k8s-deployer after a self-hosted runner is ready"
+        required: true
+        default: ubuntu-latest
+        type: choice
+        options:
+          - ubuntu-latest
+          - k8s-deployer
+      approver:
+        description: "Optional GitHub username or team that must approve the temporary IP allowlist"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jkr-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to jkr-prod
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      issues: write
+    env:
+      KUBE_NAMESPACE: jkr-prod
+      HELM_RELEASE: jkr-server
+      CHART_DIR: helm/jkr-server
+      VALUES_FILE: helm/jkr-server/values-prod.yaml
+      ECR_REGION: us-east-1
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      ECR_REPO_NAME: jkr-server
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      # Public DNS name / IP clients use to reach the relay (Environment variable on
+      # `production`). Must resolve from inside the pod.
+      RELAY_HOST: ${{ vars.RELAY_HOST }}
+      KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Fail on bad configuration BEFORE the security group is touched.
+      - name: Validate configuration (before any cluster access)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$IMAGE_TAG" =~ ^[0-9a-f]{12}$ ]]; then
+            echo "::error::image_tag must be a 12-character lowercase git SHA (got '$IMAGE_TAG')"; exit 1
+          fi
+          test -n "$ECR_REPOSITORY" || { echo "::error::vars.ECR_REPOSITORY is not set"; exit 1; }
+          case "$ECR_REPOSITORY" in
+            *.dkr.ecr.*.amazonaws.com/*) : ;;
+            *) echo "::error::vars.ECR_REPOSITORY must be the full ECR URI (got '$ECR_REPOSITORY')"; exit 1 ;;
+          esac
+          if [ "${ECR_REPOSITORY##*/}" != "$ECR_REPO_NAME" ]; then
+            echo "::error::vars.ECR_REPOSITORY points at '${ECR_REPOSITORY##*/}' but this workflow deploys '$ECR_REPO_NAME'"; exit 1
+          fi
+          test -n "$KUBECONFIG_B64" || { echo "::error::secret KUBECONFIG_B64 is not configured"; exit 1; }
+          test -n "$RELAY_HOST" || { echo "::error::Environment variable RELAY_HOST is not set"; exit 1; }
+          if ! [[ "$RELAY_HOST" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$ ]]; then
+            echo "::error::RELAY_HOST must be a bare host name or IPv4 (no scheme, no port, no spaces): '$RELAY_HOST'"; exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.ECR_REGION }}
+
+      - name: Verify the image tag exists in ECR
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          out="$(aws ecr describe-images --repository-name "$ECR_REPO_NAME" --region "$ECR_REGION" \
+                   --image-ids imageTag="$IMAGE_TAG" 2>&1)"
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "Found $ECR_REPOSITORY:$IMAGE_TAG"
+          elif printf '%s' "$out" | grep -q 'ImageNotFoundException'; then
+            echo "::error::$ECR_REPOSITORY:$IMAGE_TAG does not exist. Deploy it to int first (push to development) and use that tag."; exit 1
+          else
+            echo "::error::could not query ECR: $out"; exit 1
+          fi
+
+      - name: Collect hosted runner network details
+        id: runner_details
+        shell: bash
+        run: |
+          set -euo pipefail
+          public_ipv4="$(curl --fail --silent --show-error --retry 3 https://api.ipify.org)"
+          echo "public_ipv4=$public_ipv4" >> "$GITHUB_OUTPUT"
+          {
+            echo "## jkr-server PROD deployment"
+            echo
+            echo "- Image: \`$ECR_REPOSITORY:$IMAGE_TAG\`"
+            echo "- Relay host: \`$RELAY_HOST\`"
+            echo "- Public IPv4: \`$public_ipv4\`"
+            echo "- Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install security-group script dependency
+        run: python -m pip install --disable-pip-version-check --quiet boto3
+
+      - name: Automatically allowlist active runner IP
+        env:
+          RUNNER_PUBLIC_IPV4: ${{ steps.runner_details.outputs.public_ipv4 }}
+          SECURITY_GROUP_ID: ${{ vars.K8S_SECURITY_GROUP_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: python scripts/whitelist-public-ip/whitelist-runner-ip-and-rm.py
+
+      - name: Wait for temporary security-group approval
+        uses: trstringer/manual-approval@v1.13.1
+        with:
+          secret: ${{ github.token }}
+          approvers: ${{ inputs.approver || github.actor }}
+          minimum-approvals: 1
+          issue-title: "Approve Kubernetes API access for jkr-server PROD deployment"
+          issue-body: |
+            The workflow added the public IPv4 below to the EC2 security group
+            inbound rule for TCP 6443. Verify it, then comment `approve`.
+
+            **This is PRODUCTION.** The pod uses the Recreate strategy (host ports,
+            single volume), so the old pod stops before the new one starts. Sessions
+            that are currently relayed through this server will drop, and new
+            connections fail for the duration of the restart (typically under a minute).
+            Peers reconnect on their own. Direct peer-to-peer sessions are not affected.
+
+            - Image: `${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}`
+            - Public IPv4: `${{ steps.runner_details.outputs.public_ipv4 }}`
+            - Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Approval waits until the 30-minute job timeout. If it expires, rerun
+            and use the new IP shown in the new issue.
+          exclude-workflow-initiator-as-approver: false
+          fail-on-denial: true
+          polling-interval-seconds: 10
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Configure cluster access
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          install -d -m 700 "$RUNNER_TEMP/kube"
+          echo "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kube/config"
+          chmod 600 "$RUNNER_TEMP/kube/config"
+          export KUBECONFIG="$RUNNER_TEMP/kube/config"
+          echo "KUBECONFIG=$RUNNER_TEMP/kube/config" >> "$GITHUB_ENV"
+
+          server="$(kubectl config view --minify -o jsonpath='{.clusters[*].cluster.server}')"
+          echo "Kubernetes API server: $server"
+
+          attempt=1
+          max_attempts=12
+          until kubectl version --request-timeout=10s >/dev/null 2>&1; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "Could not reach the Kubernetes API after $max_attempts attempts."
+              kubectl version --request-timeout=10s
+              exit 1
+            fi
+            echo "API not reachable yet (attempt $attempt/$max_attempts); retrying in 10s..."
+            attempt=$((attempt + 1))
+            sleep 10
+          done
+
+          echo "Connected to the Kubernetes API."
+          kubectl auth can-i create deployments --namespace "$KUBE_NAMESPACE"
+
+      - name: Ensure namespace exists
+        run: kubectl create namespace "$KUBE_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create or refresh the ECR image pull secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          ecr_token="$(aws ecr get-login-password --region "$ECR_REGION")"
+          kubectl create secret docker-registry ecr-pull \
+            --namespace "$KUBE_NAMESPACE" \
+            --docker-server="${ECR_REPOSITORY%%/*}" \
+            --docker-username=AWS \
+            --docker-password="$ecr_token" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      # Every client pins the server's PUBLIC key; prove the deploy does not change it.
+      - name: Record the current server public key (if a server already runs)
+        id: keybefore
+        shell: bash
+        run: |
+          set -uo pipefail
+          key="$(kubectl exec --namespace "$KUBE_NAMESPACE" "deploy/$HELM_RELEASE" -c hbbs -- cat /data/id_ed25519.pub 2>/dev/null | tr -d '\r\n' || true)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          if [ -n "$key" ]; then echo "Existing server public key: $key"; else echo "No running server yet (first install)."; fi
+
+      - name: Lint the Helm chart
+        run: |
+          helm lint "$CHART_DIR" \
+            --values "$VALUES_FILE" \
+            --set image.repository="$ECR_REPOSITORY" \
+            --set image.tag="$IMAGE_TAG" \
+            --set-string relayHost="$RELAY_HOST"
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install "$HELM_RELEASE" "$CHART_DIR" \
+            --namespace "$KUBE_NAMESPACE" \
+            --create-namespace \
+            --values "$VALUES_FILE" \
+            --set image.repository="$ECR_REPOSITORY" \
+            --set image.tag="$IMAGE_TAG" \
+            --set-string relayHost="$RELAY_HOST" \
+            --wait --timeout 10m --rollback-on-failure
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/"$HELM_RELEASE" \
+            --namespace "$KUBE_NAMESPACE" --timeout=5m
+          kubectl get pods,svc,pvc --namespace "$KUBE_NAMESPACE" -o wide
+
+      - name: Smoke test (relay configured, ports reachable in-cluster)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # hbbs silently drops a relay host it cannot resolve; prove the relay list is
+          # what we asked for.
+          relay_port="$(kubectl get svc "$HELM_RELEASE" --namespace "$KUBE_NAMESPACE" \
+            -o jsonpath='{.spec.ports[?(@.name=="relay")].port}')"
+          expect="relay-servers=[\"$RELAY_HOST:$relay_port\"]"
+          logs="$(kubectl logs "deploy/$HELM_RELEASE" -c hbbs --namespace "$KUBE_NAMESPACE" --tail=200)"
+          echo "$logs" | tail -n 20
+          if ! grep -Fq "$expect" <<<"$logs"; then
+            echo "::error::hbbs is not advertising the relay ($expect). Check that RELAY_HOST resolves."
+            exit 1
+          fi
+          echo "hbbs advertises $RELAY_HOST:$relay_port"
+
+          ports="$(kubectl get svc "$HELM_RELEASE" --namespace "$KUBE_NAMESPACE" \
+            -o jsonpath='{range .spec.ports[?(@.protocol=="TCP")]}{.port}{" "}{end}')"
+          echo "TCP ports to probe: $ports"
+          # SC2016: the single-quoted script must expand inside the pod, not here.
+          # SC2086: $ports is intentionally word-split into positional args.
+          # shellcheck disable=SC2016,SC2086
+          kubectl run "jkr-smoke-$RANDOM" \
+            --namespace "$KUBE_NAMESPACE" \
+            --rm -i --restart=Never \
+            --image=busybox:1.37.0 \
+            --env "TARGET=$HELM_RELEASE.$KUBE_NAMESPACE.svc.cluster.local" \
+            --command -- sh -c 'for p in "$@"; do if nc -z -w 5 "$TARGET" "$p"; then echo "ok   tcp/$p"; else echo "FAIL tcp/$p"; exit 1; fi; done' sh $ports
+
+      - name: Verify the server key is unchanged and publish it
+        shell: bash
+        env:
+          KEY_BEFORE: ${{ steps.keybefore.outputs.key }}
+        run: |
+          set -euo pipefail
+          after="$(kubectl exec --namespace "$KUBE_NAMESPACE" "deploy/$HELM_RELEASE" -c hbbs -- cat /data/id_ed25519.pub | tr -d '\r\n')"
+          test -n "$after" || { echo "::error::could not read the server public key"; exit 1; }
+          if [ -n "$KEY_BEFORE" ] && [ "$KEY_BEFORE" != "$after" ]; then
+            echo "::error::THE SERVER PUBLIC KEY CHANGED (was $KEY_BEFORE, now $after). The volume was probably re-created; every client configured with the old key will be rejected."
+            exit 1
+          fi
+          {
+            echo "## Server public key (jkr-prod)"
+            echo
+            echo "\`$after\`"
+            echo
+            if [ -z "$KEY_BEFORE" ]; then
+              echo "> **First install.** The keypair was just generated on the volume. Back up the PRIVATE key now (see helm/jkr-server/README.md). Never commit it."
+            else
+              echo "> Unchanged by this deploy."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Server public key: $after"
+
+      - name: Show deployed release
+        if: always()
+        run: helm list --namespace "$KUBE_NAMESPACE" || true
+
+      - name: Remove temporary runner IP from security group
+        if: always()
+        env:
+          RUNNER_PUBLIC_IPV4: ${{ steps.runner_details.outputs.public_ipv4 }}
+          SECURITY_GROUP_ID: ${{ vars.K8S_SECURITY_GROUP_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          CLEANUP: "true"
+        run: python scripts/whitelist-public-ip/whitelist-runner-ip-and-rm.py

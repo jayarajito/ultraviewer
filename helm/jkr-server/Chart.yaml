@@ -1,0 +1,17 @@
+apiVersion: v2
+name: jkr-server
+description: JustKeepRemote server - RustDesk-compatible ID/rendezvous (hbbs) and relay (hbbr), built from source
+type: application
+# Chart version: bump when templates or defaults change.
+version: 0.1.0
+# appVersion tracks the bundled rustdesk-server release (informational only). The
+# deployed image tag is supplied at deploy time via --set image.tag=<git-sha>, so
+# every release pins an immutable image.
+appVersion: "1.1.17"
+keywords:
+  - justkeepremote
+  - rustdesk
+  - hbbs
+  - hbbr
+maintainers:
+  - name: Jayaraj Narayanan

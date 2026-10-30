@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string" },
+        "tag": { "type": "string", "pattern": "^$|^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$" },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "relayHost": {
+      "type": "string",
+      "description": "Public DNS name or IPv4 of the relay. No scheme, no port, no spaces or quotes (it ends up in a shell command).",
+      "pattern": "^$|^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+    },
+    "ports": {
+      "type": "object",
+      "required": ["rendezvous", "relay"],
+      "properties": {
+        "rendezvous": { "type": "integer", "minimum": 1025, "maximum": 65000 },
+        "relay": { "type": "integer", "minimum": 1025, "maximum": 65000 }
+      },
+      "additionalProperties": false
+    },
+    "hostNetwork": { "type": "boolean" },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "size": { "type": "string", "pattern": "^[0-9]+(Mi|Gi|Ti)$" },
+        "storageClass": { "type": "string" },
+        "keepOnUninstall": { "type": "boolean" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["ClusterIP"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{{- $p := include "jkr-server.ports" . | fromJson -}}
+# In-cluster only (ClusterIP). Clients reach the server through hostNetwork on the node,
+# not through this Service; it exists for in-cluster checks (smoke test) and discovery.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "jkr-server.fullname" . }}
+  labels:
+    {{- include "jkr-server.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "jkr-server.selectorLabels" . | nindent 4 }}
+  ports:
+    - { name: nat-test, port: {{ int $p.natTest }}, targetPort: nat-test, protocol: TCP }
+    - { name: rdv-tcp, port: {{ int $p.rendezvous }}, targetPort: rdv-tcp, protocol: TCP }
+    - { name: rdv-udp, port: {{ int $p.rendezvous }}, targetPort: rdv-udp, protocol: UDP }
+    - { name: hbbs-ws, port: {{ int $p.hbbsWebsocket }}, targetPort: hbbs-ws, protocol: TCP }
+    - { name: relay, port: {{ int $p.relay }}, targetPort: relay, protocol: TCP }
+    - { name: hbbr-ws, port: {{ int $p.hbbrWebsocket }}, targetPort: hbbr-ws, protocol: TCP }

@@ -1,0 +1,30 @@
+# ---- secrets: NEVER commit ----
+id_ed25519
+id_ed25519.pub
+*.BACKUP
+*.pem
+*.key
+.env
+server/data/
+
+# ---- build output (multi-GB, reproducible) ----
+vendor/rustdesk/target/
+vendor/rustdesk/flutter/build/
+vendor/rustdesk/flutter/.dart_tool/
+vendor/rustdesk-server/target/
+tools/flutter-*/
+tools/nasm-*/
+*.tar
+*.zip
+
+# ---- generated ----
+k8s-rendered.yaml
+scripts/*.log
+scripts/*.txt
+
+# ---- not part of this repo ----
+vendor/
+existingapp/
+helm-rendered/
+__pycache__/
+tools/
