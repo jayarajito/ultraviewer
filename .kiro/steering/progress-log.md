@@ -55,8 +55,36 @@ inclusion: always
 - **Branch model:** `development` -> deploy-int (auto) ; `main` -> prod only. `deploy-prod.yml` has a `guard`
   job that fails unless run from `main`; ci runs on both. Edits made locally, NOT yet committed/pushed.
   deploy-prod was not visible in the Actions list (not yet registered); expected to appear after a push.
-- **Prod still TODO:** push edits, run deploy-prod from `main` with the 12-char tag int deployed, approve issue,
-  back up `/data/id_ed25519` from jkr-prod, re-test clients on 21116/21117 (no port suffix needed).
+- **✅ PROD DEPLOYED + VERIFIED (2026-10-31):** deploy-prod ran from `main`, jkr-prod live on
+  `jkr.jayarajnarayanan.in` ports 21115-21119; user connected a remote computer through it.
+  Server side (M1 + CI/CD) is DONE. (Confirm with user that the prod private key was backed up.)
+- **NOW: M2 (client = JustKeepRemote).** Plan, in order:
+  1. Recon (read-only): where RustDesk 1.5.1 defines app name, icons, default server/key
+     (`libs/hbb_common` config `RENDEZVOUS_SERVERS`, `RS_PUB_KEY`, `APP_NAME`), and the phone-home calls
+     (`version_check_request`, `check_software_update`, api.rustdesk.com / public-server calls).
+  2. Bake server + prod key via build-time config (hbb_common/src/config.rs defaults or `custom-rendezvous-server`
+     options), so a fresh install needs no setup script.
+  3. Rebrand: APP_NAME, window titles, exe name, icon (flutter/windows/runner resources), strings.
+  4. Remove client phone-home (update check + any api.rustdesk.com calls); keep patches as a reviewable patch
+     file applied in CI against a pinned RustDesk 1.5.1 SHA (do not edit vendor/ in place un-recorded).
+  5. Build client in GitHub Actions (windows runner; ~1h+ cold, cache vcpkg) and publish exe zip as a release asset.
+  6. Then M6: Windows service install (UAC/login screen, unattended), installer + code signing.
+  **M2a STATUS (2026-10-31):** recon done (sub-agent + own greps: no other hosts: no STUN, no analytics).
+  Wrote `client/apply-jkr-patches.ps1 -Key <prod pubkey> [-DryRun]` = anchored, idempotent edits to
+  vendor/rustdesk (hbb_common is a submodule): PROD_RENDEZVOUS_SERVER + RENDEZVOUS_SERVERS = host,
+  RS_PUB_KEY = prod key, APP_NAME = JustKeepRemote (=> custom client: new config dir/service/install dir,
+  update UI off), version-check URL "", do_check_software_update no-op, get_api_server returns "" (kills
+  heartbeat/sysinfo/audit that would hit <host>:21114), admin.rustdesk.com fallback removed.
+  DryRun against pinned checkout (rustdesk 04360797, hbb_common fae47e0): all 8 anchors OK. NOT applied yet:
+  WAITING FOR the prod public key from the user (from deploy-prod run summary "Server public key (jkr-prod)").
+  Next after apply: rebuild via scripts/shortpath-build.ps1 (C:\jkr; ~15-60 min incremental), run the exe on a
+  clean profile with NO setup script, expect "Ready"; check no traffic to *.rustdesk.com (netstat/log).
+  M2b (after): icons (res/*.ico, runner app_icon.ico), Runner.rc/Cargo winres strings, tabbar_widget.dart
+  title + "About RustDesk" + rustdesk.com links, lang strings; lock settings (OVERWRITE_SETTINGS) so users
+  cannot change server; M2c: CI client build + GitHub release asset; AGPL: publish modified source (keep
+  vendor changes reproducible via this script, record upstream SHAs).
+  Constraints: AGPL -> publish source of modified client; keep build recipe from tech-stack.md (Flutter 3.24.5,
+  static ffmpeg triplet, frb 1.80.1, VS18 patch or VS2022, short build path).
 - **Next:** M2 branding, bake server+key into client, remove client phone-home (hbb_common
   version_check_request); M6 Install/service for UAC + unattended access.
 - Repo is `jayarajito/ultraviewer` (0 commits tracked yet); `.gitignore` now excludes vendor/, existingapp/, tools/.
