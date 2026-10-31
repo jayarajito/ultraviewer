@@ -193,3 +193,25 @@ Back up the prod key straight afterwards:
 kubectl -n jkr-prod exec deploy/jkr-server -c hbbs -- cat /data/id_ed25519
 Store the output in a password manager. Don't commit it.
 Repeat the two-PC test against prod. Use client-setup.ps1 without the port options and with the prod public key.
+
+
+Production Deploy getting an error
+0/1 nodes are available: 1 Insufficient cpu. preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+
+Current Values
+Requests
+cpu=50mmemory=64Mi
+Limits
+cpu=500mmemory=256Mi
+
+In INT
+Requests
+cpu=50mmemory=64Mi
+Limits
+cpu=1memory=512Mi
+
+I just Scalled Down INT then Prod Up
+
+Run the Script with Public Key for Prod  WBQWPJXUFJcOp+ndfi9d6B+IOh719m5PNsa+45G6H0s=
+
+powershell -ExecutionPolicy Bypass -File client-setup.ps1 -Server jkr.jayarajnarayanan.in -Key 'WBQWPJXUFJcOp+ndfi9d6B+IOh719m5PNsa+45G6H0s='
