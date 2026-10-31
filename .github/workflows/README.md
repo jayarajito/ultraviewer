@@ -2,8 +2,8 @@
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | push / PR to development | Helm lint + render + guard rails, hadolint, SG-script tests, shellcheck, actionlint. No credentials. |
-| `deploy-int.yml` | push to development (server/chart/script paths) or manual | Build image from source, smoke-test it, push to ECR, deploy to `jkr-int`. |
+| `ci.yml` | push / PR to development or main | Helm lint + render + guard rails, hadolint, SG-script tests, shellcheck, actionlint. No credentials. |
+| `deploy-int.yml` | push to `development` only (server/chart/script paths) or manual | Build image from source, smoke-test it, push to ECR, deploy to `jkr-int`. |
 | `deploy-prod.yml` | manual only | Promote an existing int-built tag to `jkr-prod`. No rebuild. |
 
 A push to `development` triggers `deploy-int` automatically (after you configure the items below).

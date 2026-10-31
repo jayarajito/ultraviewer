@@ -33,8 +33,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Production deploys come from `main` only. Pick `main` in the 'Use workflow from' box.
+  # This job exists so a run from another branch FAILS LOUDLY instead of being skipped.
+  guard:
+    name: Require main branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check branch
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::prod deploys run from main only (this run is on $REF). Re-run and choose main in 'Use workflow from'."
+            exit 1
+          fi
+
   deploy:
     name: Deploy to jkr-prod
+    needs: guard
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 30
     environment: production

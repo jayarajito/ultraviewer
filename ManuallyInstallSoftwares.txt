@@ -140,5 +140,17 @@ Now I can connect the computer from 192.168.0.104 to 192.168.0.108 and 192.168.0
 
 
 
+Server Deployed into Our Server
 
+
+3) Testing with the two PCs
+I updated 
+client-setup.ps1
+. It now takes -IdPort and -RelayPort, and its reachability test follows them. Before, it had the 21xxx ports hardcoded.
+
+First get the server's public key. It is in the deploy-int run summary under "Server public key (jkr-int)".
+
+On each PC (104 and 108), run this from PowerShell, with the key pasted in:
+
+powershell -ExecutionPolicy Bypass -File client-setup.ps1 -Server jkr.jayarajnarayanan.in -IdPort 22116 -RelayPort 22117 -Key '<public key>'
 
