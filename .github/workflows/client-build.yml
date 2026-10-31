@@ -58,14 +58,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Validate the release tag
+      - name: Check out this repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # The app compares its own version (client/VERSION, compiled in) with the newest release tag
+      # to decide whether to show "new version available". A tag that differs from VERSION would
+      # make every installed copy think it is outdated (or never notice a real update).
+      - name: Validate the release tag against client/VERSION
         env:
           RELEASE: ${{ inputs.release }}
           TAG: ${{ inputs.release_tag }}
         run: |
-          if [ "$RELEASE" = "true" ] && ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "::error::release_tag must look like v0.1.0 when release is ticked (got '$TAG')"; exit 1
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < client/VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::client/VERSION must be MAJOR.MINOR.PATCH (got '$version')"; exit 1; }
+          if [ "$RELEASE" = "true" ] && [ "$TAG" != "v$version" ]; then
+            echo "::error::release_tag must be exactly v$version (client/VERSION is $version); got '$TAG'. Bump client/VERSION first."; exit 1
           fi
+          echo "Building JustKeepRemote $version"
 
   bridge:
     name: Generate Flutter-Rust bridge

@@ -54,6 +54,21 @@ jobs:
           python -m py_compile whitelist-runner-ip-and-rm.py
           python -m unittest -v test_whitelist
 
+  client-update-logic:
+    name: Update-check logic tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo test (pure logic, in a throw-away crate)
+        run: |
+          set -euo pipefail
+          d="$(mktemp -d)"
+          mkdir "$d/src"
+          printf '[package]\nname = "t"\nversion = "0.1.0"\nedition = "2021"\n[dependencies]\nserde_json = "1.0"\n' > "$d/Cargo.toml"
+          printf '#[path = "%s/client/src/jkr_update_logic.rs"]\npub mod jkr_update_logic;\n' "$GITHUB_WORKSPACE" > "$d/src/lib.rs"
+          cargo test --manifest-path "$d/Cargo.toml"
+
   shell-and-workflows:
     name: shellcheck and actionlint
     runs-on: ubuntu-latest

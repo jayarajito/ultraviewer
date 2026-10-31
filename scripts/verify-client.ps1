@@ -8,7 +8,8 @@ param(
     [string]$Dir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'vendor\rustdesk\flutter\build\windows\x64\runner\Release'),
     [string]$ServerHost = 'jkr.jayarajnarayanan.in',
     [string]$Key = 'WBQWPJXUFJcOp+ndfi9d6B+IOh719m5PNsa+45G6H0s=',
-    [string]$AppName = 'JustKeepRemote'
+    [string]$AppName = 'JustKeepRemote',
+    [string]$Repo = 'jayarajito/ultraviewer'
 )
 $ErrorActionPreference = 'Stop'
 $bad = 0
@@ -32,6 +33,12 @@ Check ((Count $s $Key) -ge 1) "contains our server public key"
 foreach ($n in 'api.rustdesk.com', 'admin.rustdesk.com', 'rs-ny.rustdesk.com', 'OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=') {
     Check ((Count $s $n) -eq 0) "does NOT contain $n"
 }
+# Update check (v0.2.0+): points at OUR releases and knows its own version.
+# The compiler stores the URL in pieces (host/path, owner, name, query), so check each piece.
+$owner, $rname = $Repo.Split('/')
+Check (((Count $s "api.github.com/repos/") -ge 1) -and ((Count $s $owner) -ge 1) -and ((Count $s $rname) -ge 1) -and ((Count $s "/releases?per_page=") -ge 1)) "update check targets $Repo"
+$ver = (Get-Content (Join-Path (Split-Path -Parent $PSScriptRoot) 'client\VERSION') -Raw).Trim()
+Check ((Count $s $ver) -ge 1) "contains its own version $ver"
 Write-Host "== $exe ==" -ForegroundColor Cyan
 $vi = (Get-Item $exe).VersionInfo
 Check ($vi.ProductName -eq $AppName) "ProductName is '$($vi.ProductName)' (want $AppName)"

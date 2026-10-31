@@ -123,6 +123,64 @@ inclusion: always
   RISKS: Rust 1.75 vs local 1.99 never compared; first CI run will likely need iteration (cold ~1.5-3h).
   TODO next: user runs client-build once (Actions > Build client (Windows) > Run workflow, release OFF first);
   then code signing / MSI installer decision; translate other languages; privacy-mode broker; auto-update (own).
+  ✅ M2c FIRST CI RUN GREEN (2026-10-31, branch development, run 41201987866): bridge + build jobs
+  succeeded, "Build and package" 1h04m (Build the client 33m37s), verify-client + package + artifact upload
+  all passed in CI (so the CI-built dll has our host/key and none of the RustDesk hosts). Release job was
+  skipped (release off). NEXT: user downloads artifact `JustKeepRemote-windows-x64`, runs it on a clean PC to
+  confirm it behaves like the local build; then re-run with release ON + tag v0.1.0 -> draft release.
+  The CI zip is not code-signed. Second run should be faster (vcpkg + cargo caches now exist).
+  ✅ CI-BUILT ZIP USER-TESTED (2026-10-31): downloaded artifact from run 41201987866 Summary > Artifacts,
+  installed, remote access works. CI build = trustworthy. NEXT: run client-build with release ON, tag v0.1.0
+  (draft prerelease) and publish after review; then prod-key backup check, README/user guide, own update
+  check, other-language strings, signing decision.
+  ✅ RELEASE v0.1.0 CREATED by user (2026-10-31, tag at commit 9326144; user said "completed"; draft vs
+  published state not confirmed). Added root README.md + LICENSE (AGPL-3.0 text from gnu.org) - NOT yet
+  committed. NOTE: GitHub repo shows as PRIVATE (lock icon): AGPL requires offering source to the users who
+  receive the binary, so before distributing to anyone outside the owner, make the repo public (or give them
+  source access). Open items: own update check, other-language strings, code signing/MSI, prod-key backup
+  confirmation, int env cleanup optional.
+  ✅ v0.1.0 PUBLISHED-ish; prod key backup CONFIRMED by user.
+  v0.2.0 (IN PROGRESS, 2026-10-31): two features requested by user:
+  (1) UPDATE CHECK against our own GitHub releases: `client/src/jkr_update_logic.rs` (pure, 6 unit tests via
+  scripts/test-update-logic.ps1, also run in ci.yml job client-update-logic) + `client/src/jkr_update.rs`
+  (GET api.github.com/repos/<Repo>/releases, 12h re-check, respects enable-check-update, sets
+  SOFTWARE_UPDATE_URL + pushes check_software_update_finish; only accepts URLs under
+  https://github.com/<Repo>/releases/). Reuses the existing home-screen banner; button opens the release page;
+  NO auto-download/install. Version source = `client/VERSION` (0.2.0), compiled in via @JKR_VERSION@; the
+  workflow now REQUIRES release_tag == v<VERSION>. Package zip is now named JustKeepRemote-<VERSION>-win-x64.
+  CAVEAT: anonymous GitHub API sees nothing while the repo is PRIVATE (404 -> silently "no update"); repo must
+  be public for the check to work. v0.1.0 builds have no checker, so only >=0.2.0 installs will notice updates.
+  (2) MINIMIZE HIDES THE WINDOW: minimize button on the MAIN window calls windowManager.hide() instead of
+  minimize, only when installed (tray icon exists, tray "Open"/click brings it back), stop-service != Y and
+  option `hide-on-minimize` != N (checkbox "Hide window when minimized" in Settings > General, installed
+  Windows only). Portable runs keep normal minimize (no tray => window would be lost). Taskbar-click/Win+D
+  minimize unchanged. Incoming-connection window (CM) unaffected. NOT a stealth mode: the tray icon stays.
+  apply-jkr-patches.ps1 now supports multi-line anchors (LF/CRLF), -Repo, reads client/VERSION; verified:
+  all anchors match on a PRISTINE vendor checkout (reset via git checkout in vendor/rustdesk + hbb_common),
+  second run skips every code edit. Local build log scripts/build-client-v020.log. NEXT: verify build, user
+  tests (banner needs a published release > 0.2.0 and a public repo), commit, run client-build with
+  release_tag v0.2.0.
+  ✅ v0.2.0 LOCAL BUILD OK (2026-10-31 20:51): Rust (incl. new modules) compiled first time, Flutter built,
+  verify-client ALL PASS (incl. new update-check + version checks), package dist/JustKeepRemote-0.2.0-win-x64.zip
+  (32 MB). NOT yet run by the user; NOT yet committed; CI run with release_tag v0.2.0 not yet done.
+  Files to commit: client/{VERSION,src/*,apply-jkr-patches.ps1}, scripts/{package-client,verify-client,
+  test-update-logic}.ps1, .github/workflows/{client-build,ci}.yml, README, steering.
+  REBUILT 21:05 with 2 more UI patches: Settings > General now shows "Check for software update on startup"
+  (was hidden for custom clients, so users could not opt out) and hides upstream's useless "auto update"
+  switch. Final zip sha256 d7cec0ab...3c08 (32 MB), verify-client ALL PASS. apply script now skips unchanged
+  files (a rewrite bumps mtime => ~9 min cargo rebuild).
+  OPEN DECISION (user asked to embed a GitHub PAT in the client so the update check can read the PRIVATE repo):
+  NOT implemented. Reason: a token compiled into a distributed exe is extractable with `strings`; it would give
+  anyone with a copy read access to the private source, expires (fine-grained max 1y => rebuild/redistribute),
+  and cannot be revoked per-user. Recommended instead: (A) make repo public (AGPL expects source to be available
+  to recipients anyway), or (B) keep source private and publish only the release zips to a separate PUBLIC
+  releases-only repo (client checks that repo, no token in the client; workflow pushes with a PAT kept as a
+  GitHub secret), or (C) static version.json on own host. Awaiting user's choice. If user still wants the PAT:
+  fine-grained, this repo only, Contents:read only, short expiry, injected from a GitHub secret at build time.
+  Minimize question: hide-on-minimize already implemented (see above); awaiting user test on an INSTALLED copy.
+  TEST PLAN: (a) minimize hides the window ONLY on an INSTALLED copy; tray icon/Open restores; checkbox in
+  Settings > General turns it off; portable copy minimizes normally. (b) update banner can only be proven once
+  the repo is public AND a release newer than the running version is published (e.g. run 0.2.0, publish 0.2.1).
   TO VERIFY after build: icon/title/About text, Settings > Network greyed out, still "Ready" + connects.
   NEXT: M2c CI client build + release asset; then M6 service/installer.
   Next after apply: rebuild via scripts/shortpath-build.ps1 (C:\jkr; ~15-60 min incremental), run the exe on a

@@ -10,7 +10,8 @@ $rel  = Join-Path $repo 'vendor\rustdesk\flutter\build\windows\x64\runner\Releas
 if (-not (Test-Path (Join-Path $rel 'rustdesk.exe'))) { throw "Build the client first (scripts\shortpath-build.ps1): $rel" }
 if (Get-Process rustdesk, JustKeepRemote -ErrorAction SilentlyContinue) { throw "Close the running client first." }
 
-$ver = ((Select-String -Path (Join-Path $repo 'vendor\rustdesk\Cargo.toml') -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value)
+# Our own version (client\VERSION), not RustDesk's 1.5.1 base version.
+$ver = (Get-Content (Join-Path $repo 'client\VERSION') -Raw).Trim()
 $name = "JustKeepRemote-$ver-win-x64"
 $stage = Join-Path $repo "dist\$name"
 $zip = Join-Path $repo "dist\$name.zip"
