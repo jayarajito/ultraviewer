@@ -48,6 +48,15 @@ inclusion: always
   ci + deploy-int; approve the issue; then verify with a real client (ID server jkr.jayarajnarayanan.in:22116,
   relay :22117 for int, key from run summary). Int ports are 22xxx and NOT open in the SG (optional) -
   open TCP 22115-22119 + UDP 22116 only if testing int from outside the node.
+- **INT DEPLOYED + CLIENT TEST PASSED (2026-10-31):** deploy-int succeeded on the real cluster (jkr-int,
+  ports 22115-22119, SG opened for them). Two PCs (192.168.0.108, 192.168.0.104) connected and
+  remote-controlled each other through `jkr.jayarajnarayanan.in:22116/22117` using `scripts/client-setup.ps1
+  -IdPort 22116 -RelayPort 22117 -Key <int key>`. This verifies hostNetwork on Cilium, EBS PVC, SG, DNS.
+- **Branch model:** `development` -> deploy-int (auto) ; `main` -> prod only. `deploy-prod.yml` has a `guard`
+  job that fails unless run from `main`; ci runs on both. Edits made locally, NOT yet committed/pushed.
+  deploy-prod was not visible in the Actions list (not yet registered); expected to appear after a push.
+- **Prod still TODO:** push edits, run deploy-prod from `main` with the 12-char tag int deployed, approve issue,
+  back up `/data/id_ed25519` from jkr-prod, re-test clients on 21116/21117 (no port suffix needed).
 - **Next:** M2 branding, bake server+key into client, remove client phone-home (hbb_common
   version_check_request); M6 Install/service for UAC + unattended access.
 - Repo is `jayarajito/ultraviewer` (0 commits tracked yet); `.gitignore` now excludes vendor/, existingapp/, tools/.

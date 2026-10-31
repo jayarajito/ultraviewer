@@ -154,3 +154,42 @@ On each PC (104 and 108), run this from PowerShell, with the key pasted in:
 
 powershell -ExecutionPolicy Bypass -File client-setup.ps1 -Server jkr.jayarajnarayanan.in -IdPort 22116 -RelayPort 22117 -Key '<public key>'
 
+
+BWO2gaTmAiEjr62Fq0YLbR8dj1SY06P6TFBO4aNbwDU=
+
+
+powershell -ExecutionPolicy Bypass -File client-setup.ps1 -Server jkr.jayarajnarayanan.in -IdPort 22116 -RelayPort 22117 -Key 'BWO2gaTmAiEjr62Fq0YLbR8dj1SY06P6TFBO4aNbwDU='
+
+
+output
+>cd C:\Users\JAYARAJ\OneDrive\Development\Projects\UltraviewerClone\ultraviewer\scripts                                                                                                    >powershell -ExecutionPolicy Bypass -File client-setup.ps1 -Server jkr.jayarajnarayanan.in -IdPort 22116 -RelayPort 22117 -Key 'BWO2gaTmAiEjr62Fq0YLbR8dj1SY06P6TFBO4aNbwDU='              === Reachability test to jkr.jayarajnarayanan.in ===                                                                                                                                         jkr.jayarajnarayanan.in:22115  reachable = True
+  jkr.jayarajnarayanan.in:22116  reachable = True
+  jkr.jayarajnarayanan.in:22117  reachable = True
+  jkr.jayarajnarayanan.in:22118  reachable = True
+  jkr.jayarajnarayanan.in:22119  reachable = True
+=== Writing client config ===
+Config written -> C:\Users\JAYARAJ\AppData\Roaming\RustDesk\config\RustDesk2.toml
+rendezvous_server = 'jkr.jayarajnarayanan.in:22116'
+nat_type = 1
+serial = 0
+unlock_pin = ''
+[options]
+custom-rendezvous-server = 'jkr.jayarajnarayanan.in:22116'
+relay-server = 'jkr.jayarajnarayanan.in:22117'
+key = 'BWO2gaTmAiEjr62Fq0YLbR8dj1SY06P6TFBO4aNbwDU='
+
+Now launch rustdesk.exe on this machine; it should show 'Ready' against jkr.jayarajnarayanan.in:22116.
+>
+
+
+For Production
+
+1. Finish the production deploy (a few minutes)
+
+Commit and push the workflow edits from last time. They add the main-only guard and the development/main branch triggers. Push them to development first, then merge to main.
+In Actions, run Deploy jkr-server (prod), choosing main in "Use workflow from". Give it the 12-character tag that int deployed. Approve the issue when it appears.
+Back up the prod key straight afterwards:
+
+kubectl -n jkr-prod exec deploy/jkr-server -c hbbs -- cat /data/id_ed25519
+Store the output in a password manager. Don't commit it.
+Repeat the two-PC test against prod. Use client-setup.ps1 without the port options and with the prod public key.
