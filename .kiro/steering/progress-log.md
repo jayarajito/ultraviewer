@@ -7,7 +7,51 @@ inclusion: always
 > Update this at the end of every work session. Newest entry on top.
 > Legend: âœ… done Â· ðŸš§ in progress Â· â­ï¸ next Â· â“ open question / needs decision
 
-## Current status: âœ… M0 complete Â· âœ… M1 image Â· âœ… CI/CD + Helm written & locally verified (NOT yet run on GitHub/cluster)
+## Current status: v0.2.1 built locally, verified, packaged. NOT yet committed/pushed/released.
+
+### v0.2.1 (2026-10-31/11-01) â€” fix: "About" page showed 1.5.1 instead of our version
+- **Bug reported by user:** after installing published v0.2.0, Settings > About showed "Version: 1.5.1".
+- **Root cause:** THREE independent version strings exist in the RustDesk source tree, none of which
+  apply-jkr-patches.ps1 touched: (1) `Cargo.toml` `version =` -> feeds hbb_common's `gen_version()` build
+  step -> writes `src/version.rs` `crate::VERSION` -> read by `ui_interface::get_version()` -> shown on the
+  About page AND used by RustDesk's own peer version-compatibility protocol checks; (2) `Cargo.lock`'s own
+  `[[package]] name = "rustdesk" version = "..."` entry, checked independently by `cargo build --locked`;
+  (3) `flutter/pubspec.yaml` `version: X.Y.Z+68` -> feeds `FLUTTER_VERSION` -> `Runner.rc`'s
+  `FileVersion`/`ProductVersion` -> the exe's Windows file-properties version (not the same field as the
+  in-app About text). All three must track `client/VERSION` or they silently diverge.
+- **Fix:** added `Edit-VersionField` (new helper in apply-jkr-patches.ps1, distinct from `Edit-Line`) that
+  CAPTURES the current version value via a regex group and splices in `client/VERSION`'s value byte-for-byte,
+  rather than assuming/reconstructing a fixed anchor string (`Edit-Line` can't handle a value that changes
+  every release: the anchor is gone after the first patch, so a later bump would silently no-op). Applied to
+  all three locations. `scripts/verify-client.ps1` now also asserts the exe's `ProductVersion` matches
+  `client/VERSION` (new check `exe ProductVersion is 'X.Y.Z+68'`), to catch any future regression here.
+- **Lessons hit while fixing (kept for next time):**
+  - `RegexOptions.Multiline`'s `$` matches before `\n`, NOT before `\r\n` - on this CRLF-checked-out repo,
+    every multiline version pattern needed an explicit `\r?` before `$`, or it silently matches 0 times.
+  - A naive first attempt used `[regex]::Replace` with reconstructed line text across the whole 3-line
+    `Cargo.lock` entry; it round-tripped fine by eye (grep showed the right text) but something about it
+    left `cargo build --locked` rejecting the lock file anyway with no explanation. Replaced with the
+    simpler substring-splice approach (only the captured version digits are replaced, nothing else in the
+    line/entry is touched or reconstructed) - this is the one that actually passed `cargo check --locked`.
+  - `cargo update -p rustdesk --precise 0.2.1` is NOT a safe manual workaround: on this project it
+    downgraded 5 unrelated crates (cfg_aliases, minimal-lexical, muldiv, pretty-hex, windows-link, xkeysym)
+    to garbage "0.2.x" versions, because it treated our 3-part version as a real semver constraint to
+    resolve against. Reverted via `git checkout -- Cargo.lock`. Don't use this command for this file again.
+  - Idempotency was verified by running the patch script twice in a row after each fix (must show
+    `skip (already applied)` on the 2nd run) and by `git diff` on the touched files (must be a 1-line diff,
+    nothing else in the file disturbed).
+- **Verified locally (NOT yet pushed to GitHub):** fresh pristine `git checkout` of vendor/rustdesk, full
+  apply-jkr-patches.ps1 dry-run (all ok/skip, 0 fail), real run, 2nd run all-skip, full rebuild via
+  shortpath-build.ps1, verify-client.ps1 ALL PASS (including new ProductVersion check), packaged
+  `dist/JustKeepRemote-0.2.1-win-x64.zip` (32MB, sha256 4364c75785e827edea87066a909ab81418275b0a24174acedde43f84784dc03b).
+- **NOT verified:** has not been installed/run by the user yet. `client-build.yml` CI workflow has not been
+  run for 0.2.1. Nothing committed to git yet (client/VERSION bump to 0.2.1, the Edit-VersionField patches,
+  the verify-client.ps1 check are all still local-only changes).
+- **NEXT:** commit + push to development; run client-build workflow with release_tag v0.2.1; publish release;
+  user re-installs and confirms About page now shows 0.2.1, AND (bonus) this is the real first end-to-end
+  test of the update banner, since existing v0.2.0 installs should now see "0.2.1 available" on next check.
+
+## Earlier status: âœ… M0 complete Â· âœ… M1 image Â· âœ… CI/CD + Helm written & locally verified (NOT yet run on GitHub/cluster)
 
 ### âœ… CI/CD + Helm (2026-10-30/31) â€” modelled on user's `existingapp` (lotto) pipeline
 - **Helm chart** `helm/jkr-server` (replaces the old kustomize `k8s/`, now deleted). Release `jkr-server`,

@@ -43,5 +43,9 @@ Write-Host "== $exe ==" -ForegroundColor Cyan
 $vi = (Get-Item $exe).VersionInfo
 Check ($vi.ProductName -eq $AppName) "ProductName is '$($vi.ProductName)' (want $AppName)"
 Check ($vi.FileDescription -like "$AppName*") "FileDescription is '$($vi.FileDescription)'"
+# Three separate places carry a version number (Cargo.toml/Cargo.lock -> crate::VERSION -> About
+# page; flutter/pubspec.yaml -> Runner.rc -> this Windows file-properties field). They drifted out
+# of sync once already (shipped v0.2.0 showing "1.5.1" in About); guard against it recurring.
+Check ($vi.ProductVersion -like "$ver+*") "exe ProductVersion is '$($vi.ProductVersion)' (want $ver+<build>)"
 if ($bad -gt 0) { Write-Host "`n$bad CHECK(S) FAILED" -ForegroundColor Red; exit 1 }
 Write-Host "`nALL CLIENT CHECKS PASSED" -ForegroundColor Green

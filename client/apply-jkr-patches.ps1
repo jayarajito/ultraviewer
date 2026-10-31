@@ -120,11 +120,50 @@ Edit-Line 'Cargo.toml' 'FileDescription = "RustDesk Remote Desktop"' "FileDescri
 # ---------------------------------------------------------------------------------------------
 # v0.2.0: update check against OUR GitHub releases (replaces upstream's, which stays removed)
 # ---------------------------------------------------------------------------------------------
+# Cargo.toml's `version` feeds libs/hbb_common's gen_version() build step, which writes
+# src/version.rs (crate::VERSION) - this is what the About page shows AND what RustDesk's own
+# protocol code uses for peer version-compatibility checks. Keep it equal to client/VERSION so
+# the app never again shows "1.5.1" while actually running our own release number.
+#
+# Edit-Line is keyed on a FIXED anchor/replacement pair, which doesn't fit a value that changes
+# every release (after the first patch, the "1.5.1" anchor is gone, so a later version bump would
+# silently no-op). Edit-VersionField below finds whatever version string is CURRENTLY there (by
+# capturing it, not assuming it), and substrings it out - no regex reconstruction of surrounding
+# text, so CRLF/LF and any trailing comment are preserved byte-for-byte except the version itself.
+function Edit-VersionField {
+    param([string]$RelPath, [string]$CapturePattern, [string]$What, [string]$RegexMode = 'Multiline')
+    $path = Join-Path $Vendor $RelPath
+    $text = [IO.File]::ReadAllText($path)
+    $found = [regex]::Matches($text, $CapturePattern, [System.Text.RegularExpressions.RegexOptions]::$RegexMode)
+    if ($found.Count -ne 1) {
+        Write-Host "  FAIL  $What : matched $($found.Count) times in $RelPath (need exactly 1)" -ForegroundColor Red
+        $script:failed++
+        return
+    }
+    $group = $found[0].Groups[1]
+    if ($group.Value -eq $JkrVersion) { Write-Host "  skip  (already applied) $What"; return }
+    if (-not $DryRun) {
+        $newText = $text.Substring(0, $group.Index) + $JkrVersion + $text.Substring($group.Index + $group.Length)
+        [IO.File]::WriteAllText($path, $newText)
+    }
+    Write-Host "  ok    $What ($JkrVersion)"
+}
+Edit-VersionField 'Cargo.toml' '^version = "([^"]*)"' 'Cargo.toml version synced to client/VERSION'
+# Cargo.lock pins its own copy of the "rustdesk" package version, independent of Cargo.toml.
+# `cargo build --locked` (what build.py runs) refuses to update a stale lock file, so a
+# Cargo.toml version bump with no matching Cargo.lock edit hard-fails the build.
+Edit-VersionField 'Cargo.lock' '\[\[package\]\]\s*name = "rustdesk"\s*version = "([^"]*)"' 'Cargo.lock version synced to client/VERSION' 'Singleline'
+# flutter/pubspec.yaml's `version:` is a THIRD, independent version source: it feeds the Windows
+# build's FLUTTER_VERSION define, which Runner.rc uses for the exe's FileVersion/ProductVersion
+# (visible in Explorer's file Properties). It keeps its own build-number suffix ("+68") -
+# only the dotted part needs to track client/VERSION.
+Edit-VersionField 'flutter\pubspec.yaml' '^version: ([0-9]+\.[0-9]+\.[0-9]+)\+\d+\r?$' 'flutter/pubspec.yaml version synced to client/VERSION'
+
 Write-Host "== update check (GitHub releases of $Repo, this build is $JkrVersion) ==" -ForegroundColor Cyan
 $owner, $name = $Repo.Split('/')
 foreach ($m in 'jkr_update_logic', 'jkr_update') {
     $code = [IO.File]::ReadAllText((Join-Path $PSScriptRoot "src\$m.rs")).
-        Replace('@JKR_VERSION@', $JkrVersion).Replace('@JKR_REPO_OWNER@', $owner).Replace('@JKR_REPO_NAME@', $name)
+        Replace('@JKR_REPO_OWNER@', $owner).Replace('@JKR_REPO_NAME@', $name)
     if ($code.Contains('@JKR_')) { throw "unreplaced placeholder left in $m.rs" }
     $dst = Join-Path $Vendor "src\$m.rs"
     # Only write when the content differs: a rewrite bumps the timestamp and forces cargo to recompile the crate.
