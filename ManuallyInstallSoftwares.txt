@@ -215,3 +215,24 @@ I just Scalled Down INT then Prod Up
 Run the Script with Public Key for Prod  WBQWPJXUFJcOp+ndfi9d6B+IOh719m5PNsa+45G6H0s=
 
 powershell -ExecutionPolicy Bypass -File client-setup.ps1 -Server jkr.jayarajnarayanan.in -Key 'WBQWPJXUFJcOp+ndfi9d6B+IOh719m5PNsa+45G6H0s='
+
+
+
+Test it (about 2 minutes)
+Copy the whole Release folder to a PC. Use 104 or 108, or any other PC.
+Make sure that PC has no RustDesk or JustKeepRemote settings and has not run the setup script. On 108 and 104 you can first run 
+
+Remove-Item "$env:APPDATA\RustDesk" -Recurse -Force
+
+Close any running RustDesk first.
+Run rustdesk.exe.
+Check three things:
+Status: the bottom-left should show Ready without any setup. If it does, the server and key are baked in.
+Folder: %APPDATA%\JustKeepRemote should exist. If it does, the rename worked.
+Connection: connect between two PCs running this build, using ID and password.
+If you want to check the no-calls-to-RustDesk claim, run this while the app is open:
+
+
+netstat -ano | findstr /i "ESTABLISHED"
+
+You should only see connections to 54.81.13.170.

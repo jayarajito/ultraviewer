@@ -17,6 +17,10 @@ if (-not (Test-Path $short)) {
     Write-Host "Junction/path $short already exists" -ForegroundColor Yellow
 }
 
+# A running client locks Release\rustdesk.exe and the linker fails with LNK1104 (the old exe
+# then makes the log look like a success). Stop it first.
+Get-Process rustdesk, JustKeepRemote -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
 # Enable long paths for MSBuild/CMake in this session as a belt-and-suspenders.
 $env:LongPathsEnabled = '1'
 

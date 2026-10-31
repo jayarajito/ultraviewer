@@ -76,7 +76,55 @@ inclusion: always
   update UI off), version-check URL "", do_check_software_update no-op, get_api_server returns "" (kills
   heartbeat/sysinfo/audit that would hit <host>:21114), admin.rustdesk.com fallback removed.
   DryRun against pinned checkout (rustdesk 04360797, hbb_common fae47e0): all 8 anchors OK. NOT applied yet:
-  WAITING FOR the prod public key from the user (from deploy-prod run summary "Server public key (jkr-prod)").
+  APPLIED 2026-10-31 with prod key WBQWPJXUFJcOp+ndfi9d6B+IOh719m5PNsa+45G6H0s= (public, not secret).
+  ✅ M2 build #1 SUCCEEDED (10:14, ~25 min): rustdesk.exe + librustdesk.dll (38 MB) in
+  vendor/rustdesk/flutter/build/windows/x64/runner/Release. Binary string scan of librustdesk.dll: contains
+  jkr.jayarajnarayanan.in and the prod key; contains NO api.rustdesk.com, admin.rustdesk.com,
+  rs-ny.rustdesk.com or the old RustDesk public key. ("JustKeepRemote" not found as plain ASCII - probably
+  inlined/UTF-16; verify at runtime via the %APPDATA%\JustKeepRemote folder.) NOT yet runtime-tested:
+  ✅ RUNTIME TESTED (user, 2026-10-31): two PCs connected with the M2 build and NO setup script;
+  %APPDATA%\JustKeepRemote exists (rename works). Network check on 192.168.0.108: the rustdesk process
+  (pid 3088) had zero TCP connections and one UDP socket; every other ESTABLISHED line belonged to other
+  apps (AnyDesk, Chrome, Kiro, Freelens->54.81.13.170:6443 = k8s API via freelens-k8s-proxy, not rustdesk).
+  => no connection to any *.rustdesk.com. M2a DONE. (UDP remote addresses not visible via netstat; the
+  apply script + string scan show the update/admin URLs are gone.)
+  M2b (2026-10-31) WRITTEN + APPLIED, build #2 started (log scripts/build-client-m2b.log):
+  - `client/branding/make-icons.ps1` generates placeholder "JKR" icons (blue gradient rounded square, white text,
+    user has no logo) into client/branding/out (committed); apply script copies them to res/*.ico|png,
+    runner app_icon.ico, flutter/assets/icon.png. Replace the output with real artwork anytime.
+  - apply-jkr-patches.ps1 now also: locks custom-rendezvous-server/key/relay-server/api-server via
+    OVERWRITE_SETTINGS (Settings > Network becomes read-only), tab-bar title, "About JustKeepRemote",
+    privacy/website/powered-by/install/public-server links -> https://github.com/jayarajito/ultraviewer,
+    en.rs "RustDesk" -> JustKeepRemote (23 strings; OTHER languages still say RustDesk), exe ProductName/
+    FileDescription (Runner.rc, Cargo winres). KEPT upstream CompanyName/LegalCopyright and the About-page
+    "Purslane Tech" copyright: AGPL requires preserving upstream notices.
+  - Edit-Line idempotency fixed (applied = new text present AND old anchor gone).
+  ✅ M2b BUILD SUCCEEDED (11:33). Build #2 first failed with LNK1104 because the old rustdesk.exe was still
+  RUNNING (locked flutter/build, and scripts' silent delete hid it). LESSON: stop rustdesk.exe before any rebuild;
+  build-client script should do `Get-Process rustdesk | Stop-Process` first (TODO). Exe now reports
+  ProductName "JustKeepRemote". Awaiting user visual/runtime check.
+  PACKAGING (2026-10-31): `scripts/package-client.ps1` -> dist/JustKeepRemote-1.5.1-win-x64.zip (32 MB,
+  +.sha256; dist/ gitignored). Exe shipped as JustKeepRemote.exe (+README.txt). shortpath-build.ps1 now stops
+  running clients before building (fixes the LNK1104 lesson). M6 = RustDesk's built-in "Install" button
+  (service named JustKeepRemote, %ProgramFiles%\JustKeepRemote, needs UAC) - NOT yet tested by user:
+  test plan = install on 104, set permanent password, reboot, connect before login, open an elevated app and
+  confirm UAC prompt is controllable. M2c (CI build of client + GitHub release) still TODO: cold build ~1h+ on
+  windows-latest, needs vcpkg cache, Flutter 3.24.5 + frb 1.80.1 + VS patch; do after M6 test passes.
+  ✅ M6 TESTED by user (2026-10-31): Install + permanent password; connected to the machine after a REBOOT
+  (login-screen access works). UAC-prompt control not explicitly reported.
+  M2c WRITTEN (not run on GitHub): `.github/workflows/client-build.yml` (manual; jobs check-inputs -> bridge
+  (ubuntu, Flutter 3.22.3, frb 1.80.1) -> build (windows-2022: pinned upstream rustdesk 04360797 + hbb_common
+  fae47e0, apply-jkr-patches, Flutter 3.24.5, Rust 1.75, vcpkg 9e593bb with HOST triplet x64-windows-static,
+  dir-based vcpkg cache, C:\rd junction, build.py --flutter --hwcodec, verify-client, package-client) ->
+  optional DRAFT prerelease). Upload artifact `JustKeepRemote-windows-x64`. actionlint clean.
+  Deliberately NOT done vs upstream CI: custom Flutter engine download (rustdesk/engine) and the dropdown
+  patch; no RustDeskTempTopMostWindow broker (privacy mode feature untested). Key/host are hardcoded env
+  (public values). `scripts/verify-client.ps1` = static ship checks (passes on local build).
+  RISKS: Rust 1.75 vs local 1.99 never compared; first CI run will likely need iteration (cold ~1.5-3h).
+  TODO next: user runs client-build once (Actions > Build client (Windows) > Run workflow, release OFF first);
+  then code signing / MSI installer decision; translate other languages; privacy-mode broker; auto-update (own).
+  TO VERIFY after build: icon/title/About text, Settings > Network greyed out, still "Ready" + connects.
+  NEXT: M2c CI client build + release asset; then M6 service/installer.
   Next after apply: rebuild via scripts/shortpath-build.ps1 (C:\jkr; ~15-60 min incremental), run the exe on a
   clean profile with NO setup script, expect "Ready"; check no traffic to *.rustdesk.com (netstat/log).
   M2b (after): icons (res/*.ico, runner app_icon.ico), Runner.rc/Cargo winres strings, tabbar_widget.dart

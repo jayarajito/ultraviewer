@@ -28,3 +28,4 @@ existingapp/
 helm-rendered/
 __pycache__/
 tools/
+dist/
