@@ -111,9 +111,13 @@ if ($enText.Contains('RustDesk')) {
     Write-Host "  ok    en.rs: $([regex]::Matches($enText,'RustDesk').Count) occurrences renamed"
 } else { Write-Host "  skip  (already applied) en.rs strings" }
 
-# Windows exe metadata (CompanyName/LegalCopyright keep the upstream notice: AGPL requires it).
+# Windows exe metadata. CompanyName is the "Publisher" Windows shows in security/firewall
+# dialogs - leaving it as the upstream company name was misleading (it looks like Purslane Tech
+# published this binary, which they didn't), so it is renamed too. LegalCopyright is left alone:
+# that is the textual copyright notice, and AGPL requires keeping the original authors credited.
 Edit-Line 'flutter\windows\runner\Runner.rc' 'VALUE "FileDescription", "RustDesk Remote Desktop" "\0"' "VALUE `"FileDescription`", `"$AppName Remote Desktop`" `"\0`"" 'exe FileDescription'
 Edit-Line 'flutter\windows\runner\Runner.rc' 'VALUE "ProductName", "RustDesk" "\0"' "VALUE `"ProductName`", `"$AppName`" `"\0`"" 'exe ProductName'
+Edit-Line 'flutter\windows\runner\Runner.rc' 'VALUE "CompanyName", "Purslane Tech Pte. Ltd." "\0"' "VALUE `"CompanyName`", `"$AppName`" `"\0`"" 'exe CompanyName (Publisher)'
 Edit-Line 'Cargo.toml' 'ProductName = "RustDesk"' "ProductName = `"$AppName`"" 'librustdesk ProductName'
 Edit-Line 'Cargo.toml' 'FileDescription = "RustDesk Remote Desktop"' "FileDescription = `"$AppName Remote Desktop`"" 'librustdesk FileDescription'
 

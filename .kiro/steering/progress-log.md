@@ -7,7 +7,41 @@ inclusion: always
 > Update this at the end of every work session. Newest entry on top.
 > Legend: âœ… done Â· ðŸš§ in progress Â· â­ï¸ next Â· â“ open question / needs decision
 
-## Current status: v0.2.1 built locally, verified, packaged. NOT yet committed/pushed/released.
+## Current status: v0.2.2 built locally, verified, packaged. NOT yet committed/pushed/released.
+
+### v0.2.2 (2026-11-01) — fix: Publisher/CompanyName showed upstream's company
+- v0.2.1 was released and the update-banner end-to-end flow was CONFIRMED WORKING by the user (installed
+  v0.2.0 correctly showed "There is a new version of JustKeepRemote available (v0.2.1)" with a working
+  Download button). v0.2.1's About-page version-sync fix also confirmed good.
+- **User reported:** the Windows "Defender Firewall has blocked some features" dialog (triggered by Windows
+  itself the first time any app opens a listening socket - NOT something our code or an install script
+  requests) showed Publisher = "Purslane Tech Pte. Ltd." - looked like RustDesk's company published our
+  binary, which is misleading.
+- **Root cause:** `Runner.rc`'s `CompanyName` field (feeds the exe's Windows "Publisher" field) was left as
+  upstream's value. Previous reasoning (AGPL requires preserving the upstream notice) was conflated: AGPL's
+  notice-preservation duty is about copyright headers/license text, not the exe's Publisher identity field.
+  `LegalCopyright` (the actual textual copyright notice, still credits Purslane Tech) is correctly left alone.
+  `Cargo.toml`'s `[package.metadata.winres]` block (feeds librustdesk.dll, not the final exe) has no
+  CompanyName key at all - only Runner.rc needed the edit.
+- **Fix:** one more `Edit-Line` in apply-jkr-patches.ps1 (`CompanyName "Purslane Tech Pte. Ltd." -> "JustKeepRemote"`
+  in Runner.rc). Added a matching `verify-client.ps1` guard (`CompanyName (Publisher) is '...'`) so this can't
+  silently regress either, same pattern as the earlier ProductVersion guard.
+- Also explained to user: the firewall dialog itself is generic Windows behavior (any app opening a listening
+  socket triggers it), not from any of our scripts. The ACTUAL automatic firewall script only runs during a
+  full Install (not the portable exe the user ran): `windows.rs` emits `netsh advfirewall firewall add rule
+  name="{app_name} Service" dir=out|in action=allow program="{exe}"` as part of the install batch (upstream
+  RustDesk logic, unmodified), with a matching `delete rule` on uninstall.
+- **Verified locally:** dry-run/apply/idempotency-recheck cycle on the new CompanyName edit + the version bump
+  to 0.2.2 (client/VERSION), full rebuild (shortpath-build.ps1), verify-client.ps1 ALL PASS incl. the new
+  CompanyName check, packaged `dist/JustKeepRemote-0.2.2-win-x64.zip` (32MB,
+  sha256 f73677f25c7bf861b4119fe3ac066653068da87eadce4057fb052a729c31f9cc).
+- **NOT verified:** not yet committed/pushed. client-build CI workflow not yet run for 0.2.2. User has not
+  installed/run this build yet.
+- **NEXT:** commit + push to development; run client-build workflow with release_tag v0.2.2; publish release;
+  user re-installs (or just checks exe Properties > Details > Company name) to confirm it now says
+  "JustKeepRemote"; installed v0.2.1 copies should pick up the update banner for v0.2.2 within 12h / on restart.
+
+## Earlier status: v0.2.1 built locally, verified, packaged. NOT yet committed/pushed/released.
 
 ### v0.2.1 (2026-10-31/11-01) â€” fix: "About" page showed 1.5.1 instead of our version
 - **Bug reported by user:** after installing published v0.2.0, Settings > About showed "Version: 1.5.1".

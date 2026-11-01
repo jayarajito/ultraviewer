@@ -43,6 +43,9 @@ Write-Host "== $exe ==" -ForegroundColor Cyan
 $vi = (Get-Item $exe).VersionInfo
 Check ($vi.ProductName -eq $AppName) "ProductName is '$($vi.ProductName)' (want $AppName)"
 Check ($vi.FileDescription -like "$AppName*") "FileDescription is '$($vi.FileDescription)'"
+# Windows shows CompanyName as "Publisher" in security/firewall dialogs; it must not say the
+# upstream company (it would falsely look like they published this binary).
+Check ($vi.CompanyName -eq $AppName) "CompanyName (Publisher) is '$($vi.CompanyName)' (want $AppName)"
 # Three separate places carry a version number (Cargo.toml/Cargo.lock -> crate::VERSION -> About
 # page; flutter/pubspec.yaml -> Runner.rc -> this Windows file-properties field). They drifted out
 # of sync once already (shipped v0.2.0 showing "1.5.1" in About); guard against it recurring.
